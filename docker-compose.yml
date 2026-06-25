@@ -1,0 +1,45 @@
+services:
+  tf-serving:
+    image: tensorflow/serving
+    ports:
+      - "8502:8501"
+    volumes:
+      - ./models:/models/potatoes_model
+    environment:
+      - MODEL_NAME=potatoes_model
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/v1/models/potatoes_model || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  fastapi-app:
+    build: ./api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+    environment:
+      - TF_SERVING_HOST=tf-serving
+      - MODEL_PATH=/app/models/potato_1.h5
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:3000
+    depends_on:
+      tf-serving:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
